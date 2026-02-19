@@ -1,0 +1,52 @@
+FROM grafana/grafana:latest
+
+USER root
+
+# Create initialization script
+RUN mkdir -p /docker-entrypoint.d && cat > /docker-entrypoint.d/create-datasource.sh << 'BASHEOF'
+#!/bin/bash
+set -e
+
+# Wait a bit for Grafana to be ready
+sleep 15
+
+# Get admin credentials from environment or use defaults
+GRAFANA_ADMIN_USER="${GF_SECURITY_ADMIN_USER:-admin}"
+GRAFANA_ADMIN_PASSWORD="${GF_SECURITY_ADMIN_PASSWORD:-admin}"
+
+# Create Prometheus datasource
+echo "Creating Prometheus datasource..."
+curl -s -X POST http://localhost:3000/api/datasources \
+  -H "Content-Type: application/json" \
+  -u "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+  -d '{
+    "name": "Prometheus",
+    "type": "prometheus",
+    "url": "http://prometheus:9090",
+    "access": "proxy",
+    "isDefault": true,
+    "jsonData": {
+      "timeInterval": "15s"
+    }
+  }' && echo "✓ Datasource created" || echo "⚠ Datasource creation skipped"
+
+# Import the dashboard
+if [ -f "/etc/grafana/dashboards/django-monitoring.json" ]; then
+  echo "Importing Django Monitoring Dashboard..."
+  curl -s -X POST http://localhost:3000/api/dashboards/db \
+    -H "Content-Type: application/json" \
+    -u "${GRAFANA_ADMIN_USER}:${GRAFANA_ADMIN_PASSWORD}" \
+    -d @/etc/grafana/dashboards/django-monitoring.json && echo "✓ Dashboard imported" || echo "⚠ Dashboard import skipped"
+fi
+
+echo "Grafana initialization complete"
+BASHEOF
+
+RUN chmod +x /docker-entrypoint.d/create-datasource.sh
+
+# Copy dashboards
+COPY grafana/dashboards /etc/grafana/dashboards
+
+RUN chmod -R 777 /etc/grafana/dashboards
+
+USER grafana
