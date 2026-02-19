@@ -1,0 +1,92 @@
+# Prometheus Configuration
+# Production-ready monitoring setup for Django application
+
+global:
+  # Default scrape interval (how often to scrape targets)
+  scrape_interval: 15s
+  
+  # Default evaluation interval (how often to evaluate alert rules)
+  evaluation_interval: 15s
+  
+  # Attach these labels to any time series or alerts
+  external_labels:
+    monitor: 'monitoring-dashboard'
+    environment: 'staging'
+    version: '1.0.0'
+
+# Alert manager configuration (optional, for advanced setups)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#             - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alert_rules.yml"
+  # - "recording_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself (meta-monitoring)
+  - job_name: 'prometheus'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_timestamps: true
+
+  # Django Application Metrics
+  - job_name: 'django_app'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    
+    # Service discovery (Docker container)
+    static_configs:
+      - targets: ['django_app:8000']
+        labels:
+          service: 'django-monitoring'
+          environment: 'staging'
+          team: 'platform'
+    
+    # Relabel configs for advanced metric manipulation
+    relabel_configs:
+      # Add instance label
+      - source_labels: [__address__]
+        target_label: instance
+      
+      # Add job label
+      - source_labels: [job]
+        target_label: job
+    
+    # HTTP client settings
+    http_sd_configs: []
+    
+    # Drop certain metrics (optional)
+    metric_relabel_configs:
+      # Drop high-cardinality metrics if needed
+      # - source_labels: [__name__]
+      #   regex: 'django_http_requests_latency_seconds_by_view_method_bucket'
+      #   action: drop
+
+  # PostgreSQL Metrics (if using postgres exporter)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres_exporter:9187']
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: instance
+
+# Remote storage configuration (optional, for long-term storage)
+# remote_write:
+#   - url: "http://remote-storage:9200/write"
+#     write_relabel_configs:
+#       - source_labels: [__name__]
+#         regex: 'up|node_.*'
+#         action: keep
+
+# Remote read configuration (optional)
+# remote_read:
+#   - url: "http://remote-storage:9200/read"
